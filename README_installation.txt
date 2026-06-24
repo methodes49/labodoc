@@ -22973,5 +22973,241 @@ body.ws-epure.ws-form-open .preview-wrap-outer{
   setInterval(setOffset,800);
 })();
 </script>
+
+
+<!-- ============================================================
+     V82 — Maintenance 1er niveau : clic ligne fiable + photos drag/drop/paste
+     NE TOUCHE PAS au moteur V65/V64 : bouton jaune, impression PDF, JSON auto, toolbar.
+   ============================================================ -->
+<style id="v82-maintenance-row-fix-style">
+  .v82-maint-row{cursor:pointer!important;position:relative!important;}
+  .v82-maint-row:hover{outline:3px solid rgba(255,210,0,.75)!important;outline-offset:-3px!important;background:rgba(255,210,0,.06)!important;}
+  .v82-backdrop{position:fixed;inset:0;z-index:2147483630;background:rgba(0,0,0,.46);display:none;align-items:flex-start;justify-content:center;padding:calc(var(--labo-toolbar-offset, var(--v64-bar-h, 92px)) + 12px) 14px 14px;font-family:'DM Sans',Arial,sans-serif;}
+  .v82-backdrop.open{display:flex;}
+  .v82-modal{width:min(900px,calc(100vw - 28px));max-height:calc(100dvh - var(--labo-toolbar-offset, var(--v64-bar-h, 92px)) - 24px);background:#fff;color:#111;border:2px solid #111;border-radius:22px;box-shadow:0 26px 80px rgba(0,0,0,.38);display:grid;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden;}
+  .v82-head{background:#111;color:#fff;border-bottom:5px solid #ffd200;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .v82-head strong{font-size:1.05rem;font-weight:950;display:block;}
+  .v82-head small{color:#ffd200;font-size:.78rem;font-weight:800;display:block;margin-top:2px;}
+  .v82-close{background:#fff!important;color:#111!important;border:1px solid #fff!important;border-radius:10px!important;font-weight:950!important;padding:7px 10px!important;}
+  .v82-body{padding:16px;overflow:auto;min-height:0;-webkit-overflow-scrolling:touch;}
+  .v82-grid2{display:grid;grid-template-columns:160px 1fr;gap:12px;}
+  .v82-field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
+  .v82-field label{font-family:'JetBrains Mono',monospace;font-size:.72rem;font-weight:950;letter-spacing:.6px;text-transform:uppercase;color:#111;}
+  .v82-field input,.v82-field textarea{width:100%;background:#fff!important;color:#111!important;border:1px solid #bdb6a0!important;border-radius:10px!important;padding:10px 11px!important;font-family:'DM Sans',Arial,sans-serif;font-size:.92rem!important;}
+  .v82-field textarea{min-height:92px;resize:vertical;line-height:1.35;}
+  .v82-field input:focus,.v82-field textarea:focus{outline:none!important;border-color:#111!important;box-shadow:0 0 0 3px rgba(255,210,0,.35)!important;}
+  .v82-drop{border:2px dashed #c9b454;background:#fffbea;border-radius:16px;padding:14px;display:grid;gap:10px;align-items:center;justify-items:center;text-align:center;color:#111;min-height:96px;}
+  .v82-drop.drag{background:#fff3b8;border-color:#111;box-shadow:0 0 0 4px rgba(255,210,0,.28) inset;}
+  .v82-drop b{font-size:.95rem;}
+  .v82-drop small{color:#6b5b00;font-weight:700;}
+  .v82-drop input[type=file]{display:none!important;}
+  .v82-file-btn{display:inline-flex;align-items:center;justify-content:center;background:#111!important;color:#ffd200!important;border:1px solid #111!important;border-radius:12px!important;padding:9px 14px!important;font-weight:950!important;cursor:pointer;}
+  .v82-photos{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:10px;margin-top:10px;}
+  .v82-photo{border:1px solid #d8d0a2;border-radius:12px;background:#fff;padding:7px;display:grid;gap:7px;}
+  .v82-photo img{width:100%;height:96px;object-fit:contain;background:#f5f7fb;border-radius:8px;display:block;}
+  .v82-photo button{background:#fff!important;color:#c5161d!important;border:1px solid #e6a5a5!important;border-radius:10px!important;padding:6px 8px!important;font-weight:900!important;}
+  .v82-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#fff9dc;border-top:1px solid #e4d692;padding:12px 16px;}
+  .v82-left-actions,.v82-right-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .v82-btn{border-radius:12px!important;padding:9px 13px!important;font-weight:950!important;border:1px solid #111!important;background:#fff!important;color:#111!important;}
+  .v82-btn.primary{background:#111!important;color:#ffd200!important;}
+  .v82-btn.yellow{background:#ffd200!important;color:#111!important;border-color:#111!important;}
+  .v82-btn.danger{background:#fff!important;color:#c5161d!important;border-color:#c5161d!important;}
+  .v82-note{font-size:.8rem;color:#6b5b00;font-weight:800;}
+  @media(max-width:720px), (max-height:720px){.v82-grid2{grid-template-columns:1fr}.v82-body{padding:12px}.v82-head,.v82-foot{padding:10px 12px}.v82-modal{border-radius:18px}}
+  @media print{.v82-backdrop{display:none!important}}
+</style>
+<script id="v82-maintenance-row-fix-script">
+(function(){
+  'use strict';
+  if(window.__LABODOC_V82_MAINT_ROWS_FIXED__) return;
+  window.__LABODOC_V82_MAINT_ROWS_FIXED__ = true;
+
+  var modalIndex = 0;
+  var lastScrubAt = 0;
+
+  function safe(fn, fallback){try{return fn();}catch(e){return fallback;}}
+  function qs(sel, root){return (root||document).querySelector(sel);}
+  function qsa(sel, root){return Array.prototype.slice.call((root||document).querySelectorAll(sel));}
+  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function hasState(){return safe(function(){return typeof state==='object' && state;}, false);}
+  function isMaintenance(){return hasState() && state.active === 'maintenance';}
+  function getMaint(){
+    if(!hasState()) return null;
+    if(!state.maintenance || typeof state.maintenance !== 'object') state.maintenance = {};
+    if(!Array.isArray(state.maintenance.rows)) state.maintenance.rows = [];
+    if(!state.maintenance.rows.length) state.maintenance.rows.push(newRow(1));
+    return state.maintenance;
+  }
+  function newRow(n){return {number:String(n||1).padStart(2,'0'),title:'',controls:'',why:'',risk:'',illustration:'',illustrations:[]};}
+  function normalizeRow(r,n){
+    r = r || newRow(n||1);
+    if(!Array.isArray(r.illustrations)){
+      if(r.illustrations) r.illustrations = [r.illustrations];
+      else r.illustrations = [];
+    }
+    if(r.illustration && !r.illustrations.length) r.illustrations = [r.illustration];
+    if(!r.number) r.number = String(n||1).padStart(2,'0');
+    ['title','controls','why','risk'].forEach(function(k){if(r[k]==null) r[k]='';});
+    return r;
+  }
+  function directMaintenanceRows(){
+    var host = qs('#previewHost');
+    if(!host) return [];
+    var tables = qsa('.maint-v2-table', host).filter(function(t){return !t.classList.contains('maint-v2-checktable');});
+    var table = tables[0];
+    if(!table || !table.tBodies || !table.tBodies[0]) return [];
+    return Array.prototype.slice.call(table.tBodies[0].children).filter(function(el){return el && el.tagName === 'TR';});
+  }
+  function scrubOldTags(){
+    if(!isMaintenance()) return;
+    var host = qs('#previewHost');
+    if(!host) return;
+    // Anciennes surcouches : elles taguaient aussi les TR internes du tableau de coche.
+    qsa('.maint-v2-table tr', host).forEach(function(el){
+      el.classList.remove('v47-zone');
+      el.removeAttribute('data-v47-kind');
+      el.removeAttribute('data-v47-label');
+      el.removeAttribute('data-v47-index');
+    });
+    directMaintenanceRows().forEach(function(tr,i){
+      tr.classList.add('v82-maint-row');
+      tr.setAttribute('data-v82-maint-index', String(i));
+      tr.setAttribute('title', 'Modifier le contrôle '+(i+1));
+      tr.setAttribute('tabindex','0');
+    });
+    lastScrubAt = Date.now();
+  }
+  function commit(){
+    safe(function(){ if(typeof persist === 'function') persist(); });
+    safe(function(){ if(typeof updatePreview === 'function') updatePreview(); });
+    setTimeout(scrubOldTags,30);
+    setTimeout(scrubOldTags,180);
+  }
+  function srcOf(p){return (p && typeof p === 'object') ? (p.src || p.data || '') : String(p||'');}
+  function htmlPhotos(row){
+    var arr = Array.isArray(row.illustrations) ? row.illustrations : [];
+    if(!arr.length) return '<div class="v82-note">Aucune illustration ajoutée.</div>';
+    return '<div class="v82-photos">'+arr.map(function(p,i){var src=srcOf(p);return '<div class="v82-photo"><img src="'+esc(src)+'" alt="Illustration"><button type="button" data-v82-remove-photo="'+i+'">Retirer</button></div>';}).join('')+'</div>';
+  }
+  function ensureDom(){
+    if(qs('#v82MaintBackdrop')) return;
+    var wrap=document.createElement('div');
+    wrap.id='v82MaintBackdrop';
+    wrap.className='v82-backdrop';
+    wrap.innerHTML='<div class="v82-modal" role="dialog" aria-modal="true" aria-label="Modifier un contrôle maintenance"><div class="v82-head"><div><strong id="v82Title">Contrôle</strong><small>Maintenance 1er niveau</small></div><button type="button" class="v82-close" data-v82-close>Fermer</button></div><div class="v82-body" id="v82Body"></div><div class="v82-foot"><div class="v82-left-actions"><button type="button" class="v82-btn yellow" data-v82-add-after>+ Ajouter un contrôle après</button><button type="button" class="v82-btn danger" data-v82-delete>Supprimer ce contrôle</button></div><div class="v82-right-actions"><span class="v82-note">Modification directe depuis l’aperçu.</span><button type="button" class="v82-btn primary" data-v82-ok>OK</button></div></div></div>';
+    document.body.appendChild(wrap);
+  }
+  function openRow(index){
+    if(!isMaintenance()) return;
+    var d=getMaint();
+    index = Number(index||0);
+    if(index < 0) index = 0;
+    if(index >= d.rows.length) index = d.rows.length - 1;
+    if(index < 0){d.rows.push(newRow(1)); index=0;}
+    modalIndex=index;
+    var row=normalizeRow(d.rows[index], index+1);
+    d.rows[index]=row;
+    ensureDom();
+    qs('#v82Title').textContent='Contrôle '+(index+1);
+    qs('#v82Body').innerHTML = ''+
+      '<div class="v82-grid2">'+
+        '<div class="v82-field"><label>N°</label><input id="v82Num" value="'+esc(row.number)+'"></div>'+
+        '<div class="v82-field"><label>Titre du contrôle</label><input id="v82RowTitle" value="'+esc(row.title)+'"></div>'+
+      '</div>'+
+      '<div class="v82-field"><label>Contrôles à effectuer</label><textarea id="v82Controls">'+esc(row.controls)+'</textarea></div>'+
+      '<div class="v82-field"><label>Pourquoi</label><textarea id="v82Why">'+esc(row.why)+'</textarea></div>'+
+      '<div class="v82-field"><label>Risque</label><textarea id="v82Risk">'+esc(row.risk)+'</textarea></div>'+
+      '<div class="v82-field"><label>Illustration(s)</label><div class="v82-drop" id="v82Drop" tabindex="0"><b>Charger / glisser / coller des photos</b><small>Sélectionne un fichier, glisse une ou plusieurs images ici, ou colle une capture avec Ctrl+V.</small><label class="v82-file-btn">Choisir des fichiers<input id="v82File" type="file" accept="image/*" multiple></label></div><div id="v82PhotoList">'+htmlPhotos(row)+'</div></div>';
+    var back=qs('#v82MaintBackdrop');
+    back.classList.add('open');
+    setTimeout(function(){var t=qs('#v82RowTitle'); if(t) t.focus();},40);
+    bindPhotoZone();
+  }
+  function close(){var b=qs('#v82MaintBackdrop'); if(b) b.classList.remove('open');}
+  function writeModal(){
+    var d=getMaint(); if(!d) return;
+    var row=normalizeRow(d.rows[modalIndex], modalIndex+1);
+    row.number = qs('#v82Num') ? qs('#v82Num').value : row.number;
+    row.title = qs('#v82RowTitle') ? qs('#v82RowTitle').value : row.title;
+    row.controls = qs('#v82Controls') ? qs('#v82Controls').value : row.controls;
+    row.why = qs('#v82Why') ? qs('#v82Why').value : row.why;
+    row.risk = qs('#v82Risk') ? qs('#v82Risk').value : row.risk;
+    d.rows[modalIndex] = row;
+  }
+  function refreshPhotos(){
+    var d=getMaint(); if(!d) return;
+    var row=normalizeRow(d.rows[modalIndex], modalIndex+1);
+    var box=qs('#v82PhotoList'); if(box) box.innerHTML=htmlPhotos(row);
+  }
+  function readFile(file){return new Promise(function(resolve,reject){var r=new FileReader();r.onload=function(){resolve(r.result);};r.onerror=reject;r.readAsDataURL(file);});}
+  async function addPhotoFiles(files){
+    files = Array.prototype.slice.call(files||[]).filter(function(f){return f && /^image\//.test(f.type||'');});
+    if(!files.length) return;
+    var d=getMaint(); if(!d) return;
+    var row=normalizeRow(d.rows[modalIndex], modalIndex+1);
+    for(var i=0;i<files.length;i++) row.illustrations.push({src:await readFile(files[i]),w:100});
+    row.illustration = row.illustrations[0] ? srcOf(row.illustrations[0]) : '';
+    d.rows[modalIndex]=row;
+    refreshPhotos();
+    commit();
+  }
+  function bindPhotoZone(){
+    var drop=qs('#v82Drop'), file=qs('#v82File');
+    if(file) file.addEventListener('change',function(){addPhotoFiles(file.files);file.value='';});
+    if(drop){
+      ['dragenter','dragover'].forEach(function(evName){drop.addEventListener(evName,function(ev){ev.preventDefault();ev.stopPropagation();drop.classList.add('drag');});});
+      ['dragleave','drop'].forEach(function(evName){drop.addEventListener(evName,function(ev){ev.preventDefault();ev.stopPropagation();drop.classList.remove('drag');});});
+      drop.addEventListener('drop',function(ev){addPhotoFiles(ev.dataTransfer && ev.dataTransfer.files);});
+      drop.addEventListener('paste',function(ev){var items=ev.clipboardData && ev.clipboardData.items;if(!items)return;var files=[];Array.prototype.forEach.call(items,function(it){if(it.kind==='file'){var f=it.getAsFile(); if(f) files.push(f);}}); if(files.length){ev.preventDefault();addPhotoFiles(files);}});
+    }
+  }
+
+  // Capture fiable sur les lignes de contrôle : on n'utilise plus data-v47-index qui comptait aussi les lignes internes du tableau de coche.
+  document.addEventListener('click',function(ev){
+    if(!isMaintenance()) return;
+    var host=qs('#previewHost'); if(!host || !host.contains(ev.target)) return;
+    scrubOldTags();
+    var row=ev.target.closest && ev.target.closest('.v82-maint-row');
+    if(!row || !host.contains(row)) return;
+    ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation();
+    openRow(Number(row.getAttribute('data-v82-maint-index')||0));
+  },true);
+  document.addEventListener('keydown',function(ev){
+    if(ev.key==='Enter'){
+      var row=ev.target && ev.target.closest && ev.target.closest('.v82-maint-row');
+      if(row){ev.preventDefault();openRow(Number(row.getAttribute('data-v82-maint-index')||0));}
+    }
+    if(ev.key==='Escape'){close();}
+  },true);
+
+  document.addEventListener('click',function(ev){
+    var t=ev.target; if(!t || !t.closest) return;
+    if(t.closest('[data-v82-close]')){ev.preventDefault();close();return;}
+    if(t.closest('[data-v82-ok]')){ev.preventDefault();writeModal();commit();close();return;}
+    if(t.closest('[data-v82-add-after]')){ev.preventDefault();writeModal();var d=getMaint();d.rows.splice(modalIndex+1,0,newRow(modalIndex+2));commit();close();setTimeout(function(){openRow(modalIndex+1);},80);return;}
+    if(t.closest('[data-v82-delete]')){ev.preventDefault();var d2=getMaint();if(d2.rows.length<=1){d2.rows[0]=newRow(1);commit();close();return;} if(confirm('Supprimer ce contrôle ?')){d2.rows.splice(modalIndex,1);commit();close();}return;}
+    var rem=t.closest('[data-v82-remove-photo]');
+    if(rem){ev.preventDefault();var d3=getMaint(), row=normalizeRow(d3.rows[modalIndex], modalIndex+1), idx=Number(rem.getAttribute('data-v82-remove-photo')||0);row.illustrations.splice(idx,1);row.illustration=row.illustrations[0]?srcOf(row.illustrations[0]):'';d3.rows[modalIndex]=row;refreshPhotos();commit();return;}
+    var back=qs('#v82MaintBackdrop'); if(back && t===back){close();}
+  },true);
+
+  // Coller des images même si le focus est dans un champ de la modale.
+  document.addEventListener('paste',function(ev){
+    var back=qs('#v82MaintBackdrop'); if(!back || !back.classList.contains('open')) return;
+    var items=ev.clipboardData && ev.clipboardData.items; if(!items) return;
+    var files=[]; Array.prototype.forEach.call(items,function(it){if(it.kind==='file'){var f=it.getAsFile(); if(f && /^image\//.test(f.type||'')) files.push(f);}});
+    if(files.length){ev.preventDefault();addPhotoFiles(files);}
+  },true);
+
+  function boot(){scrubOldTags();setTimeout(scrubOldTags,80);setTimeout(scrubOldTags,400);}
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else boot();
+  window.addEventListener('load',function(){setTimeout(boot,120);setTimeout(boot,800);});
+  if(window.MutationObserver){
+    var host=qs('#previewHost');
+    if(host) new MutationObserver(function(){setTimeout(scrubOldTags,10);}).observe(host,{childList:true,subtree:true,attributes:true,attributeFilter:['data-v47-kind','class']});
+  }
+  setInterval(function(){ if(isMaintenance() && Date.now()-lastScrubAt>400) scrubOldTags(); }, 500);
+})();
+</script>
 </body>
 </html>
